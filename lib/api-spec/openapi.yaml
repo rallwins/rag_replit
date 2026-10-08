@@ -2,21 +2,41 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: |
+    Workspace-scoped document retrieval and grounded-answer API for the production RAG application.
+    The FastAPI service validates these request and response contracts. Browser requests use the
+    authenticated edge session. Secrets and raw document contents are never returned by diagnostics APIs.
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+    description: Liveness and readiness
+  - name: overview
+    description: Workspace dashboard and content-free activity
+  - name: configuration
+    description: Redacted runtime configuration status
+  - name: collections
+    description: Workspace knowledge collections
+  - name: documents
+    description: Document upload and ingestion lifecycle
+  - name: storage
+    description: Private upload URL issuance
+  - name: auth
+    description: Browser authentication state and redirects
+  - name: retrieval
+    description: Vector retrieval and grounded answer generation
+security:
+  - SessionCookie: []
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
-      summary: Health check
-      description: Returns server health status
+      summary: Liveness check
+      description: Returns process liveness without checking dependencies.
+      security: []
       responses:
         "200":
           description: Healthy
@@ -24,13 +44,709 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /v1/health/ready:
+    get:
+      operationId: readinessCheck
+      tags: [health]
+      summary: Dependency readiness check
+      security: []
+      responses:
+        "200":
+          description: Ready to serve requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /v1/dashboard:
+    get:
+      operationId: getDashboard
+      tags: [overview]
+      summary: Get workspace overview
+      responses:
+        "200":
+          description: Workspace summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/activity:
+    get:
+      operationId: listActivity
+      tags: [overview]
+      summary: List recent content-free activity
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Activity events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityPage"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/system/config:
+    get:
+      operationId: getSystemConfig
+      tags: [configuration]
+      summary: Get safe configuration status
+      description: Returns provider/model identifiers and readiness flags only; never returns credentials or endpoints containing secrets.
+      responses:
+        "200":
+          description: Redacted configuration summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfig"
+        default:
+          $ref: "#/components/responses/Problem"
+  /auth/user:
+    get:
+      operationId: getCurrentAuthUser
+      tags: [auth]
+      summary: Get the current signed-in user
+      security: []
+      responses:
+        "200":
+          description: Current authenticated user, or null when signed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserEnvelope"
+  /login:
+    get:
+      operationId: beginBrowserLogin
+      tags: [auth]
+      summary: Start the browser OIDC login flow
+      security: []
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          description: Relative path to redirect to after login.
+          schema: { type: string }
+      responses:
+        "302":
+          description: Redirect to the OIDC authorization endpoint
+  /callback:
+    get:
+      operationId: handleBrowserLoginCallback
+      tags: [auth]
+      summary: Complete the browser OIDC login flow
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: state
+          in: query
+          required: false
+          schema: { type: string }
+        - name: iss
+          in: query
+          required: false
+          schema: { type: string, format: uri }
+      responses:
+        "302":
+          description: Redirect to the validated return path or login
+  /logout:
+    get:
+      operationId: logoutBrowserSession
+      tags: [auth]
+      summary: Clear the browser session
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema: { type: string, default: / }
+      responses:
+        "302":
+          description: Redirect through OIDC logout
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [storage]
+      summary: Request a short-lived URL for direct private file upload
+      description: The browser uploads bytes to the returned URL, then finalizes the document through the collection document endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Signed upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "415":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/collections:
+    get:
+      operationId: listCollections
+      tags: [collections]
+      summary: List collections
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Collection page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionPage"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createCollection
+      tags: [collections]
+      summary: Create a collection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectionCreate"
+      responses:
+        "201":
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+        "422":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/collections/{collection_id}:
+    parameters:
+      - $ref: "#/components/parameters/CollectionId"
+    get:
+      operationId: getCollection
+      tags: [collections]
+      summary: Get a collection
+      responses:
+        "200":
+          description: Collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updateCollection
+      tags: [collections]
+      summary: Update collection details
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectionUpdate"
+      responses:
+        "200":
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteCollection
+      tags: [collections]
+      summary: Delete a collection and schedule owned data for deletion
+      responses:
+        "204":
+          description: Deletion accepted; associated document data is no longer searchable
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/collections/{collection_id}/documents:
+    parameters:
+      - $ref: "#/components/parameters/CollectionId"
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: List documents in a collection
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/DocumentStatus"
+      responses:
+        "200":
+          description: Document page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentPage"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: uploadDocument
+      tags: [documents]
+      summary: Upload a document for asynchronous ingestion
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentUploadInput"
+      responses:
+        "202":
+          description: Upload accepted and queued for ingestion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "415":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/documents/{document_id}:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: Get document ingestion status and metadata
+      responses:
+        "200":
+          description: Document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: Make document unavailable and schedule file cleanup
+      responses:
+        "204":
+          description: Document is no longer searchable
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/documents/{document_id}/retry:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+    post:
+      operationId: retryDocumentIngestion
+      tags: [documents]
+      summary: Retry failed document ingestion
+      responses:
+        "202":
+          description: Ingestion retry queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/collections/{collection_id}/search:
+    parameters:
+      - $ref: "#/components/parameters/CollectionId"
+    post:
+      operationId: searchCollection
+      tags: [retrieval]
+      summary: Retrieve ranked passages without LLM generation
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Ranked matching passages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        default:
+          $ref: "#/components/responses/Problem"
+  /v1/collections/{collection_id}/query:
+    parameters:
+      - $ref: "#/components/parameters/CollectionId"
+    post:
+      operationId: queryCollection
+      tags: [retrieval]
+      summary: Answer a question from retrieved collection passages
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+      responses:
+        "200":
+          description: Grounded answer and server-resolved citations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: sid
+  parameters:
+    CollectionId:
+      name: collection_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: document_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      description: Maximum results per page; service caps at 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  responses:
+    Problem:
+      description: Request failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: Required dependency or provider unavailable
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    GatewayTimeout:
+      description: Upstream provider timed out
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id: { type: string }
+        email: { type: [string, "null"], format: email }
+        firstName: { type: [string, "null"] }
+        lastName: { type: [string, "null"] }
+        profileImageUrl: { type: [string, "null"], format: uri }
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AuthUser"
+            - type: "null"
+    UploadUrlRequest:
+      type: object
+      additionalProperties: false
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        size: { type: integer, minimum: 1 }
+        contentType: { type: string, minLength: 1, maxLength: 255 }
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath, metadata]
+      properties:
+        uploadURL: { type: string, format: uri }
+        objectPath: { type: string }
+        metadata: { $ref: "#/components/schemas/UploadUrlRequest" }
     HealthStatus:
       type: object
+      required: [status]
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string, const: ok }
+    ReadinessStatus:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, unavailable, misconfigured]
+    Problem:
+      type: object
+      required: [type, title, status, code, request_id]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+        request_id: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+    Collection:
+      type: object
+      required: [id, name, description, document_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        document_count: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CollectionCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000, default: "" }
+    CollectionUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+    CollectionPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Collection" } }
+        next_cursor: { type: [string, "null"] }
+    DocumentStatus:
+      type: string
+      enum: [queued, processing, ready, failed, deleting, deleted]
+    Document:
+      type: object
+      required: [id, collection_id, filename, media_type, byte_size, status, chunk_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        collection_id: { type: string, format: uuid }
+        filename: { type: string }
+        media_type: { type: string }
+        byte_size: { type: integer, minimum: 0 }
+        status: { $ref: "#/components/schemas/DocumentStatus" }
+        failure_code: { type: [string, "null"] }
+        chunk_count: { type: integer, minimum: 0 }
+        page_count: { type: [integer, "null"], minimum: 0 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DocumentPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Document" } }
+        next_cursor: { type: [string, "null"] }
+    Dashboard:
+      type: object
+      required: [collection_count, document_count, ready_document_count, processing_document_count, failed_document_count, recent_activity]
+      properties:
+        collection_count: { type: integer, minimum: 0 }
+        document_count: { type: integer, minimum: 0 }
+        ready_document_count: { type: integer, minimum: 0 }
+        processing_document_count: { type: integer, minimum: 0 }
+        failed_document_count: { type: integer, minimum: 0 }
+        recent_activity:
+          type: array
+          items: { $ref: "#/components/schemas/ActivityEvent" }
+    ActivityEvent:
+      type: object
+      required: [id, event_type, outcome, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        event_type: { type: string }
+        resource_type: { type: [string, "null"] }
+        resource_id: { type: [string, "null"], format: uuid }
+        outcome: { type: string, enum: [success, failure] }
+        created_at: { type: string, format: date-time }
+    ActivityPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ActivityEvent" } }
+        next_cursor: { type: [string, "null"] }
+    SystemConfig:
+      type: object
+      required: [llm, embeddings, storage, auth]
+      properties:
+        llm:
+          type: object
+          required: [provider, model, configured]
+          properties:
+            provider: { type: string }
+            model: { type: string }
+            configured: { type: boolean }
+        embeddings:
+          type: object
+          required: [provider, model, dimensions, configured]
+          properties:
+            provider: { type: string }
+            model: { type: string }
+            dimensions: { type: integer }
+            configured: { type: boolean }
+        storage:
+          type: object
+          required: [backend, configured]
+          properties:
+            backend: { type: string }
+            configured: { type: boolean }
+        auth:
+          type: object
+          required: [mode, configured]
+          properties:
+            mode: { type: string }
+            configured: { type: boolean }
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 4000 }
+        top_k: { type: integer, minimum: 1, maximum: 20, default: 5 }
+        min_score: { type: number, minimum: 0, maximum: 1 }
+    QueryRequest:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question: { type: string, minLength: 1, maxLength: 4000 }
+        top_k: { type: integer, minimum: 1, maximum: 20, default: 5 }
+        min_score: { type: number, minimum: 0, maximum: 1 }
+    DocumentUploadInput:
+      type: object
+      additionalProperties: false
+      required: [name, size, contentType, objectPath]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        size: { type: integer, minimum: 1 }
+        contentType: { type: string, minLength: 1, maxLength: 255 }
+        objectPath: { type: string, minLength: 1, maxLength: 2048 }
+    RetrievedChunk:
+      type: object
+      required: [chunk_id, document_id, document_name, content, score]
+      properties:
+        chunk_id: { type: string, format: uuid }
+        document_id: { type: string, format: uuid }
+        document_name: { type: string }
+        content: { type: string }
+        score: { type: number, minimum: 0, maximum: 1 }
+        page_number: { type: [integer, "null"], minimum: 1 }
+        start_offset: { type: [integer, "null"], minimum: 0 }
+        end_offset: { type: [integer, "null"], minimum: 0 }
+    SearchResponse:
+      type: object
+      required: [query, results]
+      properties:
+        query: { type: string }
+        results: { type: array, items: { $ref: "#/components/schemas/RetrievedChunk" } }
+    Citation:
+      type: object
+      required: [citation_id, chunk_id, document_id, document_name, excerpt, score]
+      properties:
+        citation_id: { type: string }
+        chunk_id: { type: string, format: uuid }
+        document_id: { type: string, format: uuid }
+        document_name: { type: string }
+        excerpt: { type: string }
+        score: { type: number, minimum: 0, maximum: 1 }
+        page_number: { type: [integer, "null"], minimum: 1 }
+        start_offset: { type: [integer, "null"], minimum: 0 }
+        end_offset: { type: [integer, "null"], minimum: 0 }
+    QueryResponse:
+      type: object
+      required: [query_id, answer, citations, retrieved_count, outcome]
+      properties:
+        query_id: { type: string, format: uuid }
+        answer: { type: string }
+        citations: { type: array, items: { $ref: "#/components/schemas/Citation" } }
+        retrieved_count: { type: integer, minimum: 0 }
+        outcome: { type: string, enum: [answered, no_sources] }
+        latency_ms: { type: integer, minimum: 0 }
 

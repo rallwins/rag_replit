@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "RAG Knowledge Workspace"
+description = "A workspace for uploading and indexing source documents, exploring retrieved passages, and getting grounded answers with citations. The app uses a React and TypeScript frontend with a FastAPI service, PostgreSQL with pgvector, and configurable LLM and embedding providers."
+version = "1.0.0"
+id = "artifacts/rag-app"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24021
+
+[services.development]
+run = "pnpm --filter @workspace/rag-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/rag-app", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/rag-app/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24021"
+BASE_PATH = "/"
