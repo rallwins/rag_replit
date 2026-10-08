@@ -4,7 +4,7 @@ import { Link, useLocation, useParams } from 'wouter';
 import { ArrowLeft, Check, CircleAlert, FilePlus2, FileSearch, LoaderCircle, Pencil, RefreshCw, Search, Send, Trash2, UploadCloud, X } from 'lucide-react';
 import {
   getGetCollectionQueryKey, getGetDashboardQueryKey, getGetDocumentQueryKey, getListActivityQueryKey, getListCollectionsQueryKey, getListDocumentsQueryKey,
-  useDeleteCollection, useDeleteDocument, useGetCollection, useGetDocument, useListDocuments, useQueryCollection, useRequestUploadUrl, useRetryDocumentIngestion, useSearchCollection, useUpdateCollection, useUploadDocument,
+  useDeleteCollection, useDeleteDocument, useGetCollection, useGetDocument, useGetSystemConfig, useListDocuments, useQueryCollection, useRequestUploadUrl, useRetryDocumentIngestion, useSearchCollection, useUpdateCollection, useUploadDocument,
 } from '@workspace/api-client-react';
 import type { QueryResponse, SearchResponse } from '@workspace/api-client-react';
 import { Button, EmptyState, ErrorState, FileGlyph, formatBytes, Modal, relativeTime, SkeletonBlock, StatusBadge, useNotice } from '@/components/workspace';
@@ -16,6 +16,7 @@ export default function CollectionPage() {
   const client=useQueryClient();
   const collectionQuery=useGetCollection(collectionId,{query:{queryKey:getGetCollectionQueryKey(collectionId),enabled:!!collectionId}});
   const documentsQuery=useListDocuments(collectionId,{limit:100},{query:{queryKey:getListDocumentsQueryKey(collectionId,{limit:100}),enabled:!!collectionId,refetchInterval:query=>query.state.data?.items.some(d=>d.status==='queued'||d.status==='processing')?4500:false}});
+  const systemConfig=useGetSystemConfig();
   const [documentDetailId,setDocumentDetailId]=useState('');
   const detailQuery=useGetDocument(documentDetailId,{query:{queryKey:getGetDocumentQueryKey(documentDetailId),enabled:!!documentDetailId}});
   const requestUpload=useRequestUploadUrl();
@@ -58,6 +59,9 @@ export default function CollectionPage() {
     if(!file)return;
     setUploading(true);setUploadError('');
     try{
+      const configResult=await systemConfig.refetch();
+      if(!configResult.data)throw new Error('Provider status could not be checked. No file was uploaded; please try again.');
+      if(!configResult.data.embeddings.configured)throw new Error('Document indexing is unavailable. Configure EMBEDDING_PROVIDER=openai-compatible, EMBEDDING_BASE_URL, EMBEDDING_MODEL, and EMBEDDING_DIMENSIONS=1536 (plus EMBEDDING_API_KEY if required), then retry.');
       const contentType=file.type||'application/octet-stream';
       const signed=await requestUpload.mutateAsync({data:{name:file.name,size:file.size,contentType}});
       const put=await fetch(signed.uploadURL,{method:'PUT',headers:{'Content-Type':contentType},body:file});
@@ -105,6 +109,7 @@ export default function CollectionPage() {
       {!searchResult&&<EmptyState title="See why something matched" description="Run a retrieval inspection to see ranked excerpts, source documents, page references, and match scores."/>}
     </section>}
     {modal==='upload'&&<Modal title="Upload a source document" onClose={()=>!uploading&&setModal('')} footer={<><Button variant="outline" disabled={uploading} onClick={()=>setModal('')}>Cancel</Button><Button disabled={!file||uploading} onClick={upload}>{uploading?<><LoaderCircle size={14}/>Uploading…</>:<><UploadCloud size={14}/>Upload and queue</>}</Button></>}>
+      {systemConfig.data&&!systemConfig.data.embeddings.configured&&<div role="status" className="notice" style={{marginBottom:15,background:'#f5e7e1',color:'#8f493b'}}>Indexing is unavailable until an embeddings provider is configured. No file will be transferred.</div>}
       <div className="notice" style={{marginBottom:15}}>File bytes are sent directly to private storage using a short-lived signed URL. Only metadata is sent to the workspace API.</div><label className="file-drop" htmlFor="document-file"><UploadCloud size={21}/><strong>{file?.name??'Choose a document'}</strong><span>{file?`${formatBytes(file.size)} · ${file.type||'File type detected from extension'}`:'PDF, DOCX, TXT or another supported source'}</span><input id="document-file" type="file" onChange={fileChanged} style={{position:'absolute',width:1,height:1,opacity:0}}/></label>{file&&<div className="upload-file-row"><span>{file.name}</span><button className="icon-button" aria-label="Remove selected file" onClick={()=>setFile(null)}><X size={13}/></button></div>}{uploadError&&<div role="alert" className="notice" style={{marginTop:13,background:'#f5e7e1',color:'#a34e3e'}}>{uploadError}</div>}</Modal>}
     {modal==='edit'&&<Modal title="Edit collection details" onClose={()=>setModal('')} footer={<><Button variant="outline" onClick={()=>setModal('')}>Cancel</Button><Button type="submit" form="edit-collection" disabled={!name.trim()||updateCollection.isPending}>{updateCollection.isPending?'Saving…':'Save changes'}</Button></>}><form id="edit-collection" onSubmit={saveCollection}><div className="field"><label className="label" htmlFor="edit-name">Name</label><input id="edit-name" required maxLength={120} value={name} onChange={e=>setName(e.target.value)}/></div><div className="field"><label className="label" htmlFor="edit-description">Description</label><textarea id="edit-description" maxLength={1000} value={description} onChange={e=>setDescription(e.target.value)}/></div></form></Modal>}
     {modal==='delete-collection'&&<Modal title="Delete this collection?" onClose={()=>setModal('')} footer={<><Button variant="outline" onClick={()=>setModal('')}>Keep collection</Button><Button variant="danger" onClick={confirmDeleteCollection} disabled={deleteCollection.isPending}>{deleteCollection.isPending?'Deleting…':'Delete collection'}</Button></>}><p className="page-subtitle">“{collection.name}” and its documents will be scheduled for deletion. This cannot be undone.</p></Modal>}

@@ -236,6 +236,8 @@ async def _process_job(identity: Identity, workspace_id: str, job: dict) -> None
     job_id = str(job["job_id"])
     document_id = str(job["document_id"])
     try:
+        if not settings.embeddings_configured:
+            raise ProviderMisconfigured("Embedding provider configuration is incomplete.")
         if str(job["uploaded_by"]) != identity.subject:
             raise ObjectStorageError("document_owner_mismatch")
         payload = await download_private_object(
@@ -334,7 +336,7 @@ async def _process_job(identity: Identity, workspace_id: str, job: dict) -> None
     except ObjectStorageError as error:
         await _fail_job(identity, workspace_id, job, str(error))
     except ProviderMisconfigured:
-        await _fail_job(identity, workspace_id, job, "provider_misconfigured")
+        await _fail_job(identity, workspace_id, job, "provider_misconfigured", permanent=True)
     except ProviderUnavailable:
         await _fail_job(identity, workspace_id, job, "provider_unavailable")
     except Exception as error:
@@ -349,10 +351,16 @@ async def _process_job(identity: Identity, workspace_id: str, job: dict) -> None
         await _fail_job(identity, workspace_id, job, "ingestion_internal_error")
 
 
-async def _fail_job(identity: Identity, workspace_id: str, job: dict, code: str) -> None:
+async def _fail_job(
+    identity: Identity,
+    workspace_id: str,
+    job: dict,
+    code: str,
+    permanent: bool = False,
+) -> None:
     attempts = int(job["attempt_count"]) + 1
     max_attempts = int(job["max_attempts"])
-    terminal = attempts >= max_attempts
+    terminal = permanent or attempts >= max_attempts
     delay_seconds = min(900, 2**min(attempts, 9))
     async with tenant_transaction(identity, workspace_id) as session:
         await session.execute(

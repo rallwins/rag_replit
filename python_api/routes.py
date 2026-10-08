@@ -594,6 +594,15 @@ async def finalize_document_upload(
     if existing and existing["deleted_at"] is None:
         await _remove_upload(body.objectPath, context.identity.subject)
         return _document_out(existing)
+    if not settings.embeddings_configured:
+        await _remove_upload(body.objectPath, context.identity.subject)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "provider_misconfigured",
+                "title": "Document indexing is unavailable until an embeddings provider is configured",
+            },
+        )
     if existing:
         document_id = str(existing["id"])
         updated = await context.session.execute(
