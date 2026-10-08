@@ -25,3 +25,11 @@ packages = ["cargo", "libiconv", "postgresql", "rustc"]
 
 [objectStorage]
 defaultBucketID = "replit-objstore-77f10844-25e8-4281-905b-631c7d8b0a21"
+
+[userenv]
+
+[userenv.shared]
+LLM_BASE_URL = "https://api.openai.com/v1"
+EMBEDDING_BASE_URL = "https://api.openai.com/v1"
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMENSIONS = "1536"
