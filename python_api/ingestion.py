@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from docx import Document as WordDocument
 from pypdf import PdfReader
 
-from .config import get_settings
+from .config import Settings, get_settings
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,37 @@ class DocumentExtractionError(Exception):
         self.code = code
 
 
+def _run_pdf_ocr(
+    data: bytes,
+    page_numbers: list[int],
+    settings: Settings,
+) -> dict[int, str]:
+    try:
+        import pymupdf
+        import pytesseract
+        from PIL import Image
+
+        if settings.pdf_ocr_tesseract_cmd:
+            pytesseract.pytesseract.tesseract_cmd = settings.pdf_ocr_tesseract_cmd
+
+        recognized_text: dict[int, str] = {}
+        with pymupdf.open(stream=data, filetype="pdf") as document:
+            for page_number in page_numbers:
+                pixmap = document[page_number - 1].get_pixmap(
+                    dpi=settings.pdf_ocr_dpi,
+                    alpha=False,
+                )
+                with Image.open(BytesIO(pixmap.tobytes("png"))) as image:
+                    recognized_text[page_number] = pytesseract.image_to_string(
+                        image,
+                        lang=settings.pdf_ocr_language,
+                        timeout=settings.pdf_ocr_timeout_seconds,
+                    )
+        return recognized_text
+    except Exception as error:
+        raise DocumentExtractionError("ocr_failed") from error
+
+
 def extract_pages(data: bytes, filename: str, media_type: str) -> list[SourcePage]:
     suffix = PurePath(filename).suffix.lower()
     normalized_type = media_type.lower().split(";")[0].strip()
@@ -45,6 +76,23 @@ def extract_pages(data: bytes, filename: str, media_type: str) -> list[SourcePag
                 SourcePage(text=(page.extract_text() or "").replace("\x00", "").strip(), page_number=index)
                 for index, page in enumerate(reader.pages, start=1)
             ]
+            settings = get_settings()
+            missing_text_pages = [
+                page.page_number
+                for page in pages
+                if page.page_number is not None and not page.text
+            ]
+            if settings.pdf_ocr_enabled and missing_text_pages:
+                recognized_text = _run_pdf_ocr(data, missing_text_pages, settings)
+                pages = [
+                    SourcePage(
+                        text=(recognized_text.get(page.page_number, "").replace("\x00", "").strip())
+                        if page.page_number in missing_text_pages
+                        else page.text,
+                        page_number=page.page_number,
+                    )
+                    for page in pages
+                ]
         except DocumentExtractionError:
             raise
         except Exception as error:

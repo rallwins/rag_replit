@@ -21,7 +21,7 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "libiconv", "postgresql", "rustc"]
+packages = ["cargo", "freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libiconv", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "postgresql", "rustc", "swig", "tcl", "tesseract", "tk", "xcbuild", "zlib"]
 
 [objectStorage]
 defaultBucketID = "replit-objstore-77f10844-25e8-4281-905b-631c7d8b0a21"

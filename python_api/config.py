@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     upload_max_bytes: int = 20 * 1024 * 1024
     chunk_size_tokens: int = 500
     chunk_overlap_tokens: int = 80
+    pdf_ocr_enabled: bool = True
+    pdf_ocr_language: str = Field(default="eng", min_length=1, max_length=64)
+    pdf_ocr_dpi: int = Field(default=200, ge=72, le=600)
+    pdf_ocr_timeout_seconds: float = Field(default=60.0, gt=0, le=300)
+    pdf_ocr_tesseract_cmd: str = ""
     retrieval_top_k_default: int = 5
     retrieval_min_score: float = 0.2
     database_pool_size: int = 5
