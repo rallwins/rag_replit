@@ -1,0 +1,1 @@
+- [Python service launch root](python-service-launch-root.md) — Resolve the workspace root from the emitted API bundle, not the workflow's artifact-directory CWD.

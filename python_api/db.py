@@ -1,4 +1,7 @@
 import asyncio
+import hashlib
+import hmac
+import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 
@@ -110,6 +113,7 @@ async def current_workspace(request: Request) -> AsyncGenerator[WorkspaceContext
                 workspace_id=workspace_id,
             )
             yield context
+    await schedule_workspace_scan(identity, workspace_id)
 
 
 async def check_database() -> bool:
@@ -131,12 +135,12 @@ async def schedule_workspace_scan(identity: Identity, workspace_id: str) -> None
     if now - previous < 5:
         return
     _last_scan_signalled[key] = now
-    timestamp = str(int(__import__("time").time()))
+    timestamp = str(int(time.time()))
     path = "/enqueue"
-    signature = __import__("hmac").new(
+    signature = hmac.new(
         settings.session_secret.encode("utf-8"),
         f"{timestamp}:POST:{path}:{identity.issuer}:{identity.subject}:{workspace_id}".encode("utf-8"),
-        __import__("hashlib").sha256,
+        hashlib.sha256,
     ).hexdigest()
 
     async def send() -> None:

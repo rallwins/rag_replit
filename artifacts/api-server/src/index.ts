@@ -1,7 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import app from "./app";
 import { logger } from "./lib/logger";
 
+const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const rawPort = process.env["PORT"];
 
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -49,7 +52,7 @@ function startPythonService(modulePath: string, servicePort: number): ChildProce
       "--log-level",
       process.env.LOG_LEVEL === "debug" ? "debug" : "info",
     ],
-    { cwd: process.cwd(), env: basePythonEnv, stdio: "inherit" },
+    { cwd: workspaceRoot, env: basePythonEnv, stdio: "inherit" },
   );
   child.once("error", (error) =>
     logger.error({ errorName: error.name, service: modulePath }, "Could not start Python service"),

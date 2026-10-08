@@ -1,12 +1,15 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { BookOpen, Boxes, ChevronRight, CircleHelp, Database, FileText, Gauge, Menu, Settings2, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronRight, CircleHelp, Database, FileText, Gauge, LogOut, Menu, Settings2, X } from 'lucide-react';
 import { useListCollections } from '@workspace/api-client-react';
+import type { AuthUser } from '@workspace/replit-auth-web';
 import type { Document, ActivityEvent } from '@workspace/api-client-react';
 
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({ children, user, onLogout }: { children: ReactNode; user: AuthUser; onLogout: () => void }) {
   const [location] = useLocation();
   const [mobileNav, setMobileNav] = useState(false);
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Workspace member';
+  const initials = [user.firstName?.[0], user.lastName?.[0]].filter(Boolean).join('').toUpperCase() || name.slice(0, 2).toUpperCase();
   const nav = [
     { href: '/', label: 'Workspace overview', icon: Gauge },
     { href: '/settings', label: 'System readiness', icon: Settings2 },
@@ -17,7 +20,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="nav-label">Workspace</div>
       {nav.map(item => <Link key={item.href} href={item.href} className={`nav-link ${location === item.href ? 'active' : ''}`}><item.icon size={15}/>{item.label}</Link>)}
       <div className="side-collections"><div className="nav-label">Collections</div><CollectionNav /></div>
-      <div className="side-bottom"><div className="workspace-avatar">WK</div><div><div className="side-user-name">Research workspace</div><div className="side-user-caption">Private team space</div></div></div>
+       <div className="side-bottom"><div className="workspace-avatar">{initials}</div><div><div className="side-user-name">{name}</div><div className="side-user-caption">Personal workspace</div></div></div>
     </aside>
     <div className="main-area">
       <header className="topbar">
@@ -25,7 +28,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <button className="top-icon mobile-menu" aria-label="Open navigation" onClick={()=>setMobileNav(true)}><Menu size={15}/></button>
           <div className="breadcrumbs">WORKSPACE <ChevronRight size={11} style={{display:'inline',verticalAlign:'middle',margin:'0 4px'}}/> <strong>{location === '/settings' ? 'SYSTEM READINESS' : location.startsWith('/collections/') ? 'COLLECTION' : 'OVERVIEW'}</strong></div>
         </div>
-        <div className="top-right"><div className="health-pill"><span className="health-dot"/> Service status</div><Link href="/settings" className="top-icon" aria-label="System settings"><Settings2 size={14}/></Link></div>
+         <div className="top-right"><div className="health-pill"><span className="health-dot"/> Service status</div><Link href="/settings" className="top-icon" aria-label="System settings"><Settings2 size={14}/></Link><button className="top-icon" aria-label="Sign out" data-testid="auth-sign-out" onClick={onLogout}><LogOut size={14}/></button></div>
       </header>
       <main className="content">{children}</main>
     </div>

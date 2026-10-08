@@ -1,6 +1,6 @@
 import { File } from "@google-cloud/storage";
 
-const ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
+const ACL_POLICY_METADATA_KEY = "aclPolicy";
 
 export enum ObjectPermission {
   READ = "read",

@@ -6,7 +6,11 @@ import { Button, ErrorState, SkeletonBlock } from '@/components/workspace';
 export default function SettingsPage() {
   const client=useQueryClient();
   const health=useHealthCheck();
-  const readiness=useReadinessCheck();
+  const readiness=useReadinessCheck({query:{queryKey:getReadinessCheckQueryKey(),queryFn:async({signal})=>{
+    const response=await fetch('/api/v1/health/ready',{credentials:'include',signal});
+    if(!response.ok&&response.status!==503)throw new Error(`Readiness request failed (${response.status})`);
+    return response.json();
+  }}});
   const config=useGetSystemConfig();
   const refresh=()=>{
     client.invalidateQueries({queryKey:getHealthCheckQueryKey()});

@@ -85,21 +85,22 @@ Provider adapters are selected using environment variables, so provider choices 
 
 ### LLM
 
-- `LLM_PROVIDER`: adapter identifier; initial implementation supports `openai_compatible`.
+- `LLM_PROVIDER`: adapter identifier; initial implementation supports `openai-compatible`.
 - `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_TIMEOUT_SECONDS`, `LLM_MAX_OUTPUT_TOKENS`.
 - The adapter uses a bounded request timeout, bounded output, no automatic cross-provider fallback, and sanitized error mapping.
 
 ### Embeddings
 
-- `EMBEDDING_PROVIDER`: adapter identifier; initial implementation supports `openai_compatible`.
-- `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY`, `EMBEDDING_DIMENSIONS`.
+- `EMBEDDING_PROVIDER`: adapter identifier; initial implementation supports `openai-compatible`.
+- `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_TIMEOUT_SECONDS`.
 - `EMBEDDING_DIMENSIONS` must be `1536` for the initial schema. Changing model names is allowed only when the model returns that dimension and the vector space remains compatible. Changing dimensions or vector spaces requires a migration, re-embedding, and index rebuild before switching query traffic.
 - LLM and embedding credentials may be separate. Secrets are supplied through the deployment's secrets manager, not committed files.
 
 ### Other settings
 
-- `DATABASE_URL`, `SESSION_SECRET`, `APP_ENV`.
+- `DATABASE_URL`, `DATABASE_POOL_SIZE`, `SESSION_SECRET`, `REPL_ID`, and `ISSUER_URL`.
 - `PRIVATE_OBJECT_DIR` and App Storage bucket configuration are provisioned by the platform integration; `DOCUMENT_STORAGE_PATH` is for local development only.
+- `RAG_INTERNAL_STORAGE_BASE_URL`, `RAG_WORKER_URL`, and `RAG_WORKER_PORT` connect the API to its private storage bridge and ingestion worker.
 - `UPLOAD_MAX_BYTES`, `CHUNK_SIZE_TOKENS`, `CHUNK_OVERLAP_TOKENS`, `RETRIEVAL_TOP_K_DEFAULT`, and `RETRIEVAL_MIN_SCORE`.
 - The application validates configuration at startup, reports missing/invalid non-secret setting names in logs, and never logs credential values.
 

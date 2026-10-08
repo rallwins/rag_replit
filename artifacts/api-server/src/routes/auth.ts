@@ -47,8 +47,18 @@ async function upsertUser(claims: Record<string, unknown>): Promise<AuthUser> {
   const user = {
     id: String(claims.sub),
     email: typeof claims.email === "string" ? claims.email : null,
-    firstName: typeof claims.first_name === "string" ? claims.first_name : null,
-    lastName: typeof claims.last_name === "string" ? claims.last_name : null,
+    firstName:
+      typeof claims.first_name === "string"
+        ? claims.first_name
+        : typeof claims.given_name === "string"
+          ? claims.given_name
+          : null,
+    lastName:
+      typeof claims.last_name === "string"
+        ? claims.last_name
+        : typeof claims.family_name === "string"
+          ? claims.family_name
+          : null,
     profileImageUrl:
       typeof claims.profile_image_url === "string"
         ? claims.profile_image_url

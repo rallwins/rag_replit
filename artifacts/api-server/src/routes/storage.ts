@@ -94,7 +94,11 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
 
 // Internal-only bridge: FastAPI/worker can read private objects, but callers
 // need a short-lived HMAC tied to the exact method, path, user, and owner path.
-router.get("/internal/storage/objects/*path", async (req: Request, res: Response): Promise<void> => {
+router.all("/internal/storage/objects/*path", async (req: Request, res: Response): Promise<void> => {
+  if (!["GET", "HEAD", "DELETE"].includes(req.method)) {
+    res.status(405).end();
+    return;
+  }
   const raw = req.params.path;
   const storagePath = Array.isArray(raw) ? raw.join("/") : raw;
   const subject = req.header("x-rag-subject") ?? "";
@@ -114,7 +118,7 @@ router.get("/internal/storage/objects/*path", async (req: Request, res: Response
     problem(req, res, 403, "internal_signature_invalid", "Internal file access denied");
     return;
   }
-  const canonical = `${timestamp}:GET:/api/internal/storage/objects/${storagePath}:${owner}:${subject}`;
+  const canonical = `${timestamp}:${req.method}:/api/internal/storage/objects/${storagePath}:${owner}:${subject}`;
   const expected = createHmac("sha256", secret).update(canonical).digest("hex");
   if (!safeEqualHex(signature, expected)) {
     problem(req, res, 403, "internal_signature_invalid", "Internal file access denied");
@@ -123,9 +127,18 @@ router.get("/internal/storage/objects/*path", async (req: Request, res: Response
   try {
     const file = await storage.getObjectEntityFile(`/objects/${storagePath}`);
     await storage.setPrivateOwner(file, subject);
+    if (req.method === "DELETE") {
+      await file.delete({ ignoreNotFound: true });
+      res.status(204).end();
+      return;
+    }
     const [metadata] = await file.getMetadata();
     res.setHeader("Content-Type", String(metadata.contentType || "application/octet-stream"));
     if (metadata.size) res.setHeader("Content-Length", String(metadata.size));
+    if (req.method === "HEAD") {
+      res.status(200).end();
+      return;
+    }
     file.createReadStream().on("error", () => {
       if (!res.headersSent) problem(req, res, 500, "storage_read_failed", "Could not read document");
       else res.destroy();

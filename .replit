@@ -22,3 +22,6 @@ timeoutMs = 20000
 [nix]
 channel = "stable-25_05"
 packages = ["cargo", "libiconv", "postgresql", "rustc"]
+
+[objectStorage]
+defaultBucketID = "replit-objstore-77f10844-25e8-4281-905b-631c7d8b0a21"

@@ -84,6 +84,42 @@ class ActivityPage(BaseModel):
     next_cursor: str | None = None
 
 
+class Dashboard(BaseModel):
+    collection_count: int
+    document_count: int
+    ready_document_count: int
+    processing_document_count: int
+    failed_document_count: int
+    recent_activity: list[ActivityEvent]
+
+
+class ProviderSummary(BaseModel):
+    provider: str
+    model: str
+    configured: bool
+
+
+class EmbeddingSummary(ProviderSummary):
+    dimensions: int
+
+
+class StorageSummary(BaseModel):
+    backend: str
+    configured: bool
+
+
+class AuthSummary(BaseModel):
+    mode: str
+    configured: bool
+
+
+class SystemConfig(BaseModel):
+    llm: ProviderSummary
+    embeddings: EmbeddingSummary
+    storage: StorageSummary
+    auth: AuthSummary
+
+
 class RetrievedChunk(BaseModel):
     chunk_id: str
     document_id: str

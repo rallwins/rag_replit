@@ -15,19 +15,21 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_model: str = ""
     llm_api_key: str = ""
+    llm_timeout_seconds: float = Field(default=45.0, gt=0, le=300)
+    llm_max_output_tokens: int = Field(default=1200, ge=1, le=8192)
 
     embedding_provider: str = "openai-compatible"
     embedding_base_url: str = ""
     embedding_model: str = ""
     embedding_api_key: str = ""
     embedding_dimensions: int = 1536
+    embedding_timeout_seconds: float = Field(default=45.0, gt=0, le=300)
 
     upload_max_bytes: int = 20 * 1024 * 1024
     chunk_size_tokens: int = 500
     chunk_overlap_tokens: int = 80
     retrieval_top_k_default: int = 5
     retrieval_min_score: float = 0.2
-    provider_timeout_seconds: float = 45.0
     database_pool_size: int = 5
 
     rag_internal_storage_base_url: str = ""
@@ -48,12 +50,16 @@ class Settings(BaseSettings):
 
     @property
     def llm_configured(self) -> bool:
-        return bool(self.llm_provider and self.llm_base_url and self.llm_model)
+        return bool(
+            self.llm_provider == "openai-compatible"
+            and self.llm_base_url
+            and self.llm_model
+        )
 
     @property
     def embeddings_configured(self) -> bool:
         return bool(
-            self.embedding_provider
+            self.embedding_provider == "openai-compatible"
             and self.embedding_base_url
             and self.embedding_model
             and self.embedding_dimensions == 1536
